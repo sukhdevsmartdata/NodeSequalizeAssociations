@@ -2,18 +2,49 @@ import { Request, Response } from 'express';
 import User from '../models/Users';
 import Post from '../models/Posts';
 import Comment from '../models/Comments';
-
+import { Op } from 'sequelize';
 // Get all users with their posts and comments
 
 // Get all users with posts and comments
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
-      const users = await User.findAll({
+      // object destructuring with default values
+      const { page = 1, limit = 10, sort = 'name', order = 'ASC', search = '' } = req.query;
+      const offset = (Number(page) - 1) * Number(limit);
+      
+
+        // Build search conditions
+        const whereCondition = search
+        ? {
+            [Op.or]: [
+              { name: { [Op.like]: `%${search}%` } },
+              { email: { [Op.like]: `%${search}%` } },
+              { role: { [Op.like]: `%${search}%` } },
+            ],
+          }
+        : {};
+      // Fetch data with pagination, sorting, and search
+      // destructuring
+        const { rows, count } = await User.findAndCountAll({
+        where: whereCondition,
+        limit: Number(limit),
         include: [
           { model: Post, as: 'posts', include: [{ model: Comment, as: 'comments' }] },
-        ]
+        ],
+        offset,
+        order: [[sort, order.toUpperCase()]], // Sorting by dynamic field
       });
-      res.json(users);
+
+      // Respond with paginated data
+      res.status(200).json({
+        data: rows,
+        pagination: {
+          total: count,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(count / Number(limit)),
+        },
+      });
     } catch (error) {
       res.status(500).json({ error: 'Unable to fetch users' });
     }
